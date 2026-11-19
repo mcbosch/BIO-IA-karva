@@ -15,9 +15,12 @@ HPFUNCION = {
             "Q": 1,     # 4
             "L": 1,     # 5
             "ReLU": 1,  # 6
+            "Pow": 2,   # 7
+            "sin": 1,   # 8
             }
 FUNCIONES_DEFECTO = tuple(HPFUNCION)
 CONSTANTES_DEFECTO = (1.0, 2.0, 0.5, np.pi)
+
 
 class gen:
 
@@ -43,7 +46,7 @@ class gen:
         self.n_term = n_vars + len(self.constantes) # Nodos terminales
         self.n_simb = self.n_f + self.n_term  # Numero de simbolos totales
         self.nombres = [f'X{i+1}' for i in range(self.n_vars)] # Nombres de las variables
-
+        self.peso_nl = 5
         # cola: garantiza que todo gen se pueda leer completo
         self.t = self.h * (int(self.aridades.max()) - 1) + 1
         self.largo_gen = self.h + self.t
@@ -55,13 +58,31 @@ class gen:
         self.karva = []
 
     def aleatorio(self, rng):
-        """gen aleatorio válido, shape (n_genes*largo_gen,): cabeza con cualquier
-        símbolo, cola sólo con terminales."""
+        r"""
+        Gen aleatorio válido, shape (n_genes*largo_gen,): cabeza con cualquier
+        símbolo, cola sólo con terminales.
+        Parametros
+        ----------
+            - rng : numpy.random._generator.Generator
+                Puedes definir esto cómo `numpy.random.default_rng(seed)`
+                Esto nos permitirá repetir experimentos.
+        
+        NOTA
+        ----
+        Cómo nuestros genes van a ser utilizados para una regresión LINEAL vamos a 
+        sesgar la aleatoriedad para que nuestros genes no sean lineales, ya que no nos
+        aportarian ninguna información.
+        """
         # Definimos un gen aleatorio con nodos terminales
         c = rng.integers(self.n_f, self.n_simb, size = self.largo_gen)
         # Añadimos posibles funciones a la cabeza de cada gen.
-        c[np.arange(self.h)] = rng.integers(0, self.n_simb, size=self.h)
-        self.karva = c
+        # Definir una proporcion de funciones no lineale
+        lineal = True
+        while lineal:
+            w = np.where((np.arange(self.n_simb) >= 2) & (np.arange(self.n_simb) <= self.n_f), self.peso_nl, 1.0)
+            c[np.arange(self.h)] = rng.choice(np.arange(self.n_simb), p=w / w.sum(), size=self.h)
+            self.karva = c
+            lineal = self.es_lineal()
         return c
     
     def adj(self):
@@ -117,8 +138,12 @@ class gen:
 
     def es_lineal(self):
         r"""
-        Revisa que el gen con no sea lineal.
+        Revisa que el gen con no sea lineal. Devuelve True en caso de que
+        lo sea.
         """
+        if self.karva[0] >= self.n_f:
+            return True
+        
         for f in self.karva:
             if 2<= f < self.n_f:
                 # Es una funcion no lineal:
@@ -212,7 +237,7 @@ class Cromosoma:
         self.n_term = n_vars + len(self.constantes) # Nodos terminales
         self.n_simb = self.n_f + self.n_term  # Numero de simbolos totales
         self.nombres = [f'X{i+1}' for i in range(self.n_vars)] # Nombres de las variables
-
+        self.n_gen = n_gen
         # cola: garantiza que todo gen se pueda leer completo
         self.t = self.h * (int(self.aridades.max()) - 1) + 1
         self.largo_gen = self.h + self.t
@@ -226,3 +251,23 @@ class Cromosoma:
         
     def evaluar(self, Z):
         return np.array([g.evaluar(Z) for g in self.sec_genes])
+
+    def toarray(self):
+        return np.concat(self.sec_genes)
+
+    def update(self, sec):
+        r"""
+        Parametros
+        ----------
+            - Una secuencia
+        """
+        for i in range(self.n_gen):
+            start = i * self.largo_gen
+            self.sec_genes[i].karva = sec[start : start + self.largo_gen]
+
+    def plot_cromosoma(self, num=None):
+        r"""
+        Plotea los `num` primeros genes en una figura en una tabla de cómo máximo 4 columnas.
+        Es decir, si dibujamoos 5, dibujará 4 en una fila y 1 abajo. Y si dibujamos 8, en dos filas.
+        """
+        pass
