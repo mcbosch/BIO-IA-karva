@@ -8,15 +8,19 @@ from utils import *
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "genetic_data")
 
 HPFUNCION = {
-            "+": 2,     # 0 
-            "-": 2,     # 1
-            "*": 2,     # 2
-            "/": 2,     # 3
-            "Q": 1,     # 4
-            "L": 1,     # 5
-            "ReLU": 1,  # 6
-            "Pow": 2,   # 7
-            "sin": 1,   # 8
+            "+": 2,       
+            "-": 2,      
+            "*": 2,      
+            "/": 2,      
+            "Q": 1,      
+            # "L": 1,      
+            "ReLU": 1,   
+            "H": 2,         
+            "P": 2,         
+            "Max": 2,       
+            "Min": 2,
+            "Gauss": 2,
+            "R": 2,       
             }
 FUNCIONES_DEFECTO = tuple(HPFUNCION)
 CONSTANTES_DEFECTO = (1.0, 2.0, 0.5, np.pi)
@@ -46,7 +50,7 @@ class gen:
         self.n_term = n_vars + len(self.constantes) # Nodos terminales
         self.n_simb = self.n_f + self.n_term  # Numero de simbolos totales
         self.nombres = [f'X{i+1}' for i in range(self.n_vars)] # Nombres de las variables
-        self.peso_nl = 5
+        self.peso_nl = 2
         # cola: garantiza que todo gen se pueda leer completo
         self.t = self.h * (int(self.aridades.max()) - 1) + 1
         self.largo_gen = self.h + self.t
@@ -118,7 +122,12 @@ class gen:
         """
         Evalúa un gen sobre Z (N, n_vars). Devuelve un vector (N,).
         Hacemos un clip en 1e6, -1e6 para evitar problemas de overflow.
-        """
+
+        Parametros
+        ----------
+            Z : ndarray (N, n_vars)
+                cada variable es una
+        """ 
         hijos = self.adj()
         n_f, n_vars = self.n_f, self.n_vars
 
@@ -270,4 +279,24 @@ class Cromosoma:
         Plotea los `num` primeros genes en una figura en una tabla de cómo máximo 4 columnas.
         Es decir, si dibujamoos 5, dibujará 4 en una fila y 1 abajo. Y si dibujamos 8, en dos filas.
         """
-        pass
+        import matplotlib.pyplot as plt
+
+        n = self.n_gen if num is None else min(num, self.n_gen)
+        if n <= 0:
+            raise ValueError("`num` debe ser al menos 1")
+
+        ncols = min(4, n)
+        nrows = int(np.ceil(n / ncols))
+        fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3.5 * nrows),
+                                 squeeze=False)
+        axes = axes.ravel()
+
+        for i, ax in enumerate(axes):
+            if i < n:
+                self.sec_genes[i].plot_gen(ax=ax)
+                ax.set_title(f"Gen {i + 1}")
+            else:
+                ax.axis("off")  # huecos sobrantes de la última fila
+
+        fig.tight_layout()
+        return fig, axes[:n]
