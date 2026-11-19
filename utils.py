@@ -36,7 +36,27 @@ def aplicar(f, args):
         return np.where(ok, np.log(np.where(ok, np.abs(a), 1.0)), 0.0)
     if f == "ReLU":
         return np.maximum(0.0, a)
-
+    if f == "Pow":
+        # TODO
+        pass
+    if f=="H": # Huevera
+        return np.sin(a)*np.cos(a)
+    if f=="P": # Paraboloide
+        return a**2 + args[1]**2
+    if f=="Max": # Rosenbluck
+        x = np.asarray(a).ravel()   # (n,) o (n,1) -> (n,)
+        y = np.asarray(args[1]).ravel()
+        return np.maximum(x, y)
+    if f=="Min":
+        x = np.asarray(a).ravel()   # (n,) o (n,1) -> (n,)
+        y = np.asarray(args[1]).ravel()
+        return np.minimum(x, y)
+    if f=="Gauss":
+        return np.exp(-(a**2+args[1]**2))
+    if f=="R":
+        d = a**2 + args[1]**2
+        return np.divide(a, d, out=np.zeros_like(a), where=(d != 0))
+    
     raise ValueError(f"Función sin implementar: {f}")
 
 #============================================================================
@@ -66,10 +86,18 @@ def mutacion(gen, p, rng):
 
     Devuelve un individuo nuevo.
     """
-
+    # TODO -- Sesgar a funciones no lineales.
+    w = np.where((np.arange(gen.n_simb) >= 2) & (np.arange(gen.n_simb) <= gen.n_f), gen.peso_nl, 1.0)
+    p = w / w.sum()
     k = gen.karva
     for i in np.flatnonzero(rng.random(gen.largo_gen) < p):
-        k[i] = rng.integers(0 if i < gen.h else gen.n_f, gen.n_simb)
+        if i < gen.h:
+            # Higher probability to mutate as a function
+            new = rng.choice(np.arange(gen.n_simb), p=w / w.sum(), size=1)
+            new = new[0]
+        else:
+            new = rng.integers(gen.n_f, gen.n_simb)
+        k[i] = new
 
 # ------------------------------------------------------------------ transposiciones
 def transposicion_de_elementos(g1, g2, rng, long=3):
