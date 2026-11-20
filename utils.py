@@ -7,11 +7,12 @@ from gepkarva import gen, Cromosoma
 
 def load_from_json(name: str):
     """Lee genetic_data/<name>.json (creado con Cromosoma.save_as_json) y devuelve el Cromosoma."""
-    from gepkarva import Cromosoma, DATA_DIR  # import local: gepkarva ya importa utils
-    ruta = os.path.join(DATA_DIR, f"{name}.json")
+    from gepkarva import gen  # import local
+    ruta = f"{name}.json"
     with open(ruta, "r", encoding="utf-8") as f:
         d = json.load(f)
-    c = Cromosoma(d["n_vars"], d["h"], funciones=d["funciones"], constantes=d["constantes"])
+    # FIX: save_as_json guarda un `gen` (no un Cromosoma), así que se reconstruye un `gen`
+    c = gen(d["n_vars"], d["h"], funciones=d["funciones"], constantes=d["constantes"])
     c.karva = np.array(d["karva"], dtype=int)
     return c
 
@@ -40,7 +41,7 @@ def aplicar(f, args):
         # TODO
         pass
     if f=="H": # Huevera
-        return np.sin(a)*np.cos(a)
+        return np.sin(a)*np.cos(args[1])
     if f=="P": # Paraboloide
         return a**2 + args[1]**2
     if f=="Max": # Rosenbluck
@@ -87,16 +88,18 @@ def mutacion(gen, p, rng):
     Devuelve un individuo nuevo.
     """
     # TODO -- Sesgar a funciones no lineales.
-    w = np.where((np.arange(gen.n_simb) >= 2) & (np.arange(gen.n_simb) <= gen.n_f), gen.peso_nl, 1.0)
-    p = w / w.sum()
+    w = np.ones(gen.n_simb)
+    w[2:gen.n_f] = gen.peso_nl
+    pw = w / w.sum()
     k = gen.karva
     for i in np.flatnonzero(rng.random(gen.largo_gen) < p):
+
         if i < gen.h:
             # Higher probability to mutate as a function
-            new = rng.choice(np.arange(gen.n_simb), p=w / w.sum(), size=1)
-            new = new[0]
+            new = rng.choice(np.arange(gen.n_simb), p=pw, size=1)[0]
         else:
             new = rng.integers(gen.n_f, gen.n_simb)
+        
         k[i] = new
 
 # ------------------------------------------------------------------ transposiciones
@@ -127,10 +130,11 @@ def transposicion_de_elementos(g1, g2, rng, long=3):
 
     # Tomamos una secuencia de la cola de karva 2
     inicio_sec = rng.integers(0, g2.largo_gen - long + 1)
-    sec = karva2[inicio_sec, inicio_sec+long]
-    posicion_trasposicion = rng.integers(0, g2.plantilla.h - long + 1)
+    sec = karva2[inicio_sec:inicio_sec+long]  # FIX: slice, no indexado 2D
+    posicion_trasposicion = rng.integers(1, g1.h)  # FIX: no existe `plantilla`; pos >= 1 (no toca la raíz)
 
-    new_head = g1.karva[:posicion_trasposicion] + sec + g1.karva[posicion_trasposicion:]
+    # FIX: `+` sobre arrays suma elementos; hay que concatenar
+    new_head = np.concatenate([g1.karva[:posicion_trasposicion], sec, g1.karva[posicion_trasposicion:]])
     g1.karva[:g1.h] = new_head[:g1.h]
     return g1
 
@@ -155,18 +159,19 @@ def transposicion_de_raiz(g1, g2, rng, long=3):
 
     # Tomamos una secuencia de las posiciones que son funciones
     pos_f = []
-    for f in g1.karva:
-        if f < g2.plantilla.n_f:
+    # FIX: se guardan las POSICIONES de funciones de g2 (antes se guardaba el símbolo, y `plantilla` no existe)
+    for pos, f in enumerate(karva2):
+        if f < g2.n_f:
             # es una funcion
-            pos_f.append(f)
+            pos_f.append(pos)
 
     if len(pos_f) == 0:
         return g1
     
     inicio_sec = rng.choice(pos_f)
-    sec = karva2[inicio_sec, inicio_sec+long]
+    sec = karva2[inicio_sec:inicio_sec+long]  # FIX: slice
 
-    new_head = sec + g1.karva[inicio_sec:]
+    new_head = np.concatenate([sec, g1.karva[:g1.h]])  # FIX: concatenar; la secuencia va en la raíz
     g1.karva[:g1.h] = new_head[:g1.h]
     return g1
 
@@ -183,14 +188,14 @@ def recombinacion_simple(c1, c2, rng):
     sec1 = c1.toarray()
     sec2 = c2.toarray()
     posicion_recombinacion = rng.integers(1,len(sec1)-1)
-    new_sec = sec1[posicion_recombinacion:]
+    new_sec = sec1[posicion_recombinacion:].copy()  # FIX: .copy(); si no es una vista y se sobrescribe
     sec1[posicion_recombinacion:]= sec2[posicion_recombinacion:]
     sec2[posicion_recombinacion:]= new_sec
     c1.update(sec1)
     c2.update(sec2)
 
 
-def recombinacion_multipunto(self, c1, c2, rng):
+def recombinacion_multipunto(c1, c2, rng):  # FIX: sobraba `self`
     r"""
     Hace una recombinacion de dos cromosomas entre dos posiciones
     """
@@ -200,16 +205,79 @@ def recombinacion_multipunto(self, c1, c2, rng):
     posicion_recombinacion2 = rng.integers(posicion_recombinacion1,
                                            len(sec1)-1)
 
-    new_sec = sec1[posicion_recombinacion1:posicion_recombinacion2]
+    new_sec = sec1[posicion_recombinacion1:posicion_recombinacion2].copy()  # FIX: .copy() (vista)
     sec1[posicion_recombinacion1:posicion_recombinacion2]= sec2[posicion_recombinacion1:posicion_recombinacion2]
     sec2[posicion_recombinacion1:posicion_recombinacion2]= new_sec
     c1.update(sec1)
     c2.update(sec2)
 
-def recombinacion_de_cromosomas(self, c1, c2, rng):
+def recombinacion_de_cromosomas(c1, c2, rng):  # FIX: sobraba `self`
     i = rng.integers(0, c1.n_gen)
     cromosoma_intercambiado = c1.sec_genes[i]
     c1.sec_genes[i] = c2.sec_genes[i]
     c2.sec_genes[i] = cromosoma_intercambiado
 
-    
+
+# ======================================================================
+# FUNCIONES PARA EJECUTAR EXPERIMENTOS
+# ======================================================================
+
+def guardar_experimento(dd, path):
+    r"""
+    Esta función recibe un diccionario dd con el setup de un experimento,
+    y guarda el setup en path. Además, se asegura que todas las funciones 
+    necesarias para el experimento estén guardadas.
+
+    Parametros necesarios en un SetUP
+    1. n_samples : número de pruebas remezclando los datos
+    2. n_attr : número de genes de cada individuo (número de atributos que crearemos)
+    3. h : tamño de la cabeza de los genes
+    4. n_pobl : tamaño de la población inicial
+    5. n_gener : número de generaciones para evolucionar
+
+    Parametros opcionales
+    1. p_mut
+    2. p_recomb_s
+    3. p_recomb_m
+    4. p_recomb_c
+    5. p_trans_r
+    """
+    vars_obligatorias = ['n_samples', 
+                         'n_attr',
+                         'h',
+                         'n_pobl',
+                         'n_gener'
+                         ]
+    for v in vars_obligatorias:
+        assert v in dd, f"Hay que definir {v}"
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)  # incluye subcarpetas dentro de name
+    with open(path, "w", encoding="utf-8") as f:
+            json.dump(dd, f, indent=2)
+
+def cargar_experimento(ruta):
+    r"""
+    Esta función lee un experimento, guardado en formato .json y lo devuelve
+    en formato diccionario de python.
+    """
+    with open(ruta, "r", encoding="utf-8") as f:
+            dd = json.load(f)
+    return dd
+
+def load_experimentos(path):
+    r"""
+    Esta función lee de una carpeta todos los experimentos guardados que
+    queremos ejecutar y devuelve una lista donde en cada posición tenemos
+    un diccionario con el setup del  experimento.
+
+    Para mayor información en como deben estar guardados los experimenots, 
+    lea la documentación de as funciones `guardar_experimento` y 
+    `cargar_experimento`. De todas formas sólo recomendamos cargar los 
+    experimentos con datos ques se hayan guardado con las funciones ya que 
+    nos aseguran el correcto funcionamiento.
+    """
+    experimentos = []
+    for nombre in sorted(os.listdir(path)):
+        if nombre.endswith(".json"):
+            experimentos.append(cargar_experimento(os.path.join(path, nombre)))
+    return experimentos

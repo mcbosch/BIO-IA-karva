@@ -3,9 +3,8 @@ import os
 import numpy as np
 import networkx as nx
 
-from utils import *
-
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "genetic_data")
+# FIX: `from utils import *` aquí creaba un import circular (utils importa gepkarva), y
+# `aplicar` no llegaba a definirse. Ahora se importa dentro de `gen.evaluar`.
 
 HPFUNCION = {
             "+": 2,       
@@ -83,8 +82,10 @@ class gen:
         # Definir una proporcion de funciones no lineale
         lineal = True
         while lineal:
-            w = np.where((np.arange(self.n_simb) >= 2) & (np.arange(self.n_simb) <= self.n_f), self.peso_nl, 1.0)
-            c[np.arange(self.h)] = rng.choice(np.arange(self.n_simb), p=w / w.sum(), size=self.h)
+            w = np.ones(self.n_simb)
+            w[2:self.n_f] = self.peso_nl
+            p = w / w.sum()
+            c[np.arange(self.h)] = rng.choice(np.arange(self.n_simb), p=p, size=self.h)
             self.karva = c
             lineal = self.es_lineal()
         return c
@@ -128,12 +129,13 @@ class gen:
             Z : ndarray (N, n_vars)
                 cada variable es una
         """ 
+        from utils import aplicar  # FIX: import local para evitar el import circular
         hijos = self.adj()
         n_f, n_vars = self.n_f, self.n_vars
 
         def ev(i):
             s = self.karva[i]
-            if i not in hijos: # terminal
+            if s >= n_f: # terminal (se decide por el símbolo; `hijos` incluye {0: []} si la raíz es terminal)
                 if s < n_f + n_vars:
                     return Z[:, s - n_f] #   variable
                 return np.full(len(Z), self.constantes[s - n_f - n_vars])   # constante
@@ -192,7 +194,7 @@ class gen:
     def plot_gen(self, ax=None):
         G = self.grafo()
         if len(G) == 0:
-            raise "Your gen has no length"
+            raise ValueError("Your gen has no length")  # FIX: no se puede hacer raise de un str
         
         pos = self._posiciones_arbol(G)
         etiquetas = nx.get_node_attributes(G, "simbolo")
@@ -202,8 +204,7 @@ class gen:
                 node_size=900, arrows=False, font_size=10)
 
     def save_as_json(self, name:str):
-        """Guarda el gen en genetic_data/<name>.json (estructura + secuencia karva)."""
-        os.makedirs(DATA_DIR, exist_ok=True)
+        """Guarda el gen en <name>.json (estructura + secuencia karva)."""
         datos = {
             "n_vars": self.n_vars,
             "h": self.h,
@@ -211,10 +212,21 @@ class gen:
             "constantes": list(self.constantes),
             "karva": [int(s) for s in self.karva],
         }
-        ruta = os.path.join(DATA_DIR, f"{name}.json")
+        ruta = f"{name}.json"
+        os.makedirs(os.path.dirname(ruta), exist_ok=True)  # incluye subcarpetas dentro de name
         with open(ruta, "w", encoding="utf-8") as f:
             json.dump(datos, f, indent=2)
         return ruta
+
+    @classmethod
+    def load_from_json(cls, name:str):
+        """Lee un gen desde genetic_data/<name>.json (inverso de `save_as_json`)."""
+        ruta = f"{name}.json"
+        with open(ruta, "r", encoding="utf-8") as f:
+            datos = json.load(f)
+        g = cls(datos["n_vars"], datos["h"], datos["funciones"], datos["constantes"])
+        g.karva = np.array(datos["karva"], dtype=int)
+        return g
 
     def copy(self):
         c = gen(self.n_vars, self.h, self.funciones, self.constantes)
@@ -236,6 +248,7 @@ class Cromosoma:
                  funciones=FUNCIONES_DEFECTO,
                  constantes=CONSTANTES_DEFECTO,
                  ):
+        self.n_vars, self.h = n_vars, h
         self.sec_genes = [
             gen(n_vars, h, funciones, constantes) for _ in range(n_gen)
         ]
@@ -259,10 +272,10 @@ class Cromosoma:
             _ = g.aleatorio(rng)
         
     def evaluar(self, Z):
-        return np.array([g.evaluar(Z) for g in self.sec_genes])
+        return np.column_stack([g.evaluar(Z) for g in self.sec_genes])
 
     def toarray(self):
-        return np.concat(self.sec_genes)
+        return np.concatenate([g.karva for g in self.sec_genes])  # FIX: concatenar los karva, no los objetos gen
 
     def update(self, sec):
         r"""
@@ -300,3 +313,56 @@ class Cromosoma:
 
         fig.tight_layout()
         return fig, axes[:n]
+
+    def guardar_cromosoma(self, path):
+        r"""
+        Guarda el cromosmoa en una carpeta definida en path
+        donde se guardan todos los archivos json de cada gen del 
+        cromosoma.
+
+        Parametros
+        ----------
+            - path : str
+                Debe tener la forma '<destination>/<folder>' o '<folder>'
+                si queremos que la carpeta se cree en el mismo nivel
+        """
+
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        for i in range(self.n_gen):
+            name = path + f'/gen{i}'
+            self.sec_genes[i].save_as_json(name)
+
+        return None
+
+    @classmethod
+    def cargar_cromosoma(cls, path):
+        r"""
+        Lee un cromosoma guardado con `guardar_cromosoma` y devuelve un objeto
+        Cromosoma. Se leen los archivos gen0.json, gen1.json, ... de la carpeta.
+
+        Parametros
+        ----------
+            - path : str
+                Misma ruta que se usó en `guardar_cromosoma`.
+        """
+        carpeta = path
+        if not os.path.isdir(carpeta):
+            raise FileNotFoundError(f"No existe la carpeta {carpeta}")
+
+        # Genes consecutivos gen0, gen1, ... hasta que falte uno
+        genes, i = [], 0
+        while os.path.exists(os.path.join(carpeta, f"gen{i}.json")):
+            genes.append(gen.load_from_json(path + f'/gen{i}'))
+            i += 1
+        if not genes:
+            raise FileNotFoundError(f"No hay archivos gen*.json en {carpeta}")
+
+        g0 = genes[0]
+        crom = cls(g0.n_vars, g0.h, len(genes), g0.funciones, g0.constantes)
+        crom.sec_genes = genes
+        return crom
+
+    
+

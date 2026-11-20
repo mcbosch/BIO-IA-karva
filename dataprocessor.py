@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-def datos_test_train(df, test_size : float, seed = None):
+def datos_test_train(df, test_size, rng):
     r"""
     Esta función procesa los datos y crea dos conjuntos:
     uno de entrenamiento, data_train, y otro de prueba, data_test.
@@ -27,9 +27,6 @@ def datos_test_train(df, test_size : float, seed = None):
     df = pd.read_csv(df) if isinstance(df, str) else df.copy()
     
     N = df.shape[0] # number of observations
-
-    # Generador aleatorio propio: con la misma semilla, la misma mezcla
-    rng = np.random.default_rng(seed)
 
     # Mezcla aleatoria de los datos
     df = df.iloc[rng.permutation(N)].reset_index(drop=True)
