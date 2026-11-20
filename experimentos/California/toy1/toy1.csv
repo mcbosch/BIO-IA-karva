@@ -1,0 +1,3 @@
+sample,generacion,score_tr_base,score_te_base,score_tr,score_te,cromosoma
+0,1,0.6078490685182267,0.5953527474593904,0.6816384533431059,0.5965840708934548,experimentos/California/toy1/toy1/Cromosomas/C0
+1,0,0.6042570570743924,0.6129044714313434,0.6816384533431059,0.6139627879189722,experimentos/California/toy1/toy1/Cromosomas/C1

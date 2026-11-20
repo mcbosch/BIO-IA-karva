@@ -225,7 +225,8 @@ def recombinacion_de_cromosomas(c1, c2, rng):  # FIX: sobraba `self`
 def guardar_experimento(dd, path):
     r"""
     Esta función recibe un diccionario dd con el setup de un experimento,
-    y guarda el setup en path. Además, se asegura que todas las funciones 
+    y guarda el setup en la carpeta path, como <dd['name']>.json (name es
+    obligatorio). Además, se asegura que todas las funciones 
     necesarias para el experimento estén guardadas.
 
     Parametros necesarios en un SetUP
@@ -251,8 +252,12 @@ def guardar_experimento(dd, path):
     for v in vars_obligatorias:
         assert v in dd, f"Hay que definir {v}"
 
-    os.makedirs(os.path.dirname(path), exist_ok=True)  # incluye subcarpetas dentro de name
-    with open(path, "w", encoding="utf-8") as f:
+    assert 'name' in dd, "Hay que definir name"
+
+    # path es una carpeta; el archivo se llama <name>.json
+    os.makedirs(path, exist_ok=True)
+    ruta = os.path.join(path, f"{dd['name']}.json")
+    with open(ruta, "w", encoding="utf-8") as f:
             json.dump(dd, f, indent=2)
 
 def cargar_experimento(ruta):

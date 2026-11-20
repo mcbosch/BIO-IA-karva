@@ -59,9 +59,6 @@ def ejecutar_experimento(setup, name_exp, data, rng):
     debemos 
     """
 
-    # 1. CREAMOS CARPETA DEL EXPERIMENTO PARA GUARDAR RESULTADOS
-    os.makedirs(os.path.dirname(name_exp), exist_ok=True)
-
     p_mut = 0.2 
     p_recomb_s = 0.3; p_recomb_m = 0.1; p_recomb_c = 0.3
     p_trans_r = 0.1
@@ -92,11 +89,17 @@ def ejecutar_experimento(setup, name_exp, data, rng):
 
         resultados = {'sample': sample, 
                       'generacion': 0, 
+                      'score_tr_base': 0,
+                      'score_te_base': 0,
                       'score_tr': None, 
                       'score_te': None,
                       'cromosoma': None,}
         
         train, test = data[sample]
+        regresion_base = LinearRegression().fit(train[0], train[1])
+        resultados['score_tr_base'] = regresion_base.score(train[0], train[1])
+        resultados['score_te_base'] = regresion_base.score(test[0], test[1])
+
         poblacion0 = []
         for _ in range(n_pobl):
             c = Cromosoma(n_vars=n_vars, h=h, n_gen=n_attr)
@@ -114,7 +117,7 @@ def ejecutar_experimento(setup, name_exp, data, rng):
 
             # Recombinaciones simples
             recombinations = np.flatnonzero(
-                rng.random(c_plantilla.largo_gen) < p_recomb_s)
+                rng.random(len(poblacion0)) < p_recomb_s)
             
             pairs_recomb = rng.permutation(recombinations)
             for j in range(len(recombinations)):
@@ -124,7 +127,7 @@ def ejecutar_experimento(setup, name_exp, data, rng):
 
             # Recombinaciones multipunto
             recombinations = np.flatnonzero(
-            rng.random(c_plantilla.largo_gen) < p_recomb_m)
+            rng.random(len(poblacion0)) < p_recomb_m)
             pairs_recomb = rng.permutation(recombinations)
             for j in range(len(recombinations)):
                 c1 = poblacion0[recombinations[j]]
@@ -133,7 +136,7 @@ def ejecutar_experimento(setup, name_exp, data, rng):
 
             # Recombinaciones cromosoma
             recombinations = np.flatnonzero(
-            rng.random(c_plantilla.largo_gen) < p_recomb_m)
+            rng.random(len(poblacion0)) < p_recomb_m)
             pairs_recomb = rng.permutation(recombinations)
             for j in range(len(recombinations)):
                 c1 = poblacion0[recombinations[j]]
@@ -142,9 +145,9 @@ def ejecutar_experimento(setup, name_exp, data, rng):
 
             # Mutaciones
             mutations = np.flatnonzero(
-            rng.random(c_plantilla.largo_gen) < p_mut)
+            rng.random(len(poblacion0)) < p_mut)
             for j in mutations:
-                g = rng.integers(0,2)
+                g = rng.integers(0,c_plantilla.n_gen)
                 mutacion(poblacion0[j].sec_genes[g], p_mut, rng)
 
             c_gener, score_gener, _ = best_pobl(poblacion0, train)
@@ -176,7 +179,7 @@ def ejecutar_experimento(setup, name_exp, data, rng):
 if __name__ == '__main__':
 
     # ====== SETUP ==============
-    ruta_experimentos = 'experimentos/' # Definir carpeta que queremos ejecutar
+    ruta_experimentos = 'experimentos_setups/experimento1/' # Definir carpeta que queremos ejecutar
     EXPERIMENTOS = load_experimentos(ruta_experimentos)
 
     n_exp = 0
@@ -220,14 +223,14 @@ if __name__ == '__main__':
         # Ejecutamos para diabetes
         ejecutar_experimento(
                 setup,
-                f'experimentos/Diabetes/{name_exp}',
+                f'experimentos/Diabetes/{name_exp}/{name_exp}',
                 DIABETES,
                 rng,
             )
         # Ejecutamos para california
         ejecutar_experimento(
                 setup,
-                f'experimentos/California/{name_exp}/',
+                f'experimentos/California/{name_exp}/{name_exp}',
                 CALIFORNIA,
                 rng,
             )

@@ -1,0 +1,8 @@
+{
+  "n_samples": 2,
+  "n_attr": 2,
+  "h": 10,
+  "n_pobl": 10,
+  "n_gener": 10,
+  "name": "toy1"
+}

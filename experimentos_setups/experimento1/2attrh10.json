@@ -1,0 +1,8 @@
+{
+  "name": "2attrh10",
+  "n_samples": 5,
+  "n_attr": 2,
+  "h": 10,
+  "n_pobl": 100,
+  "n_gener": 200
+}
